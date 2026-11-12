@@ -138,6 +138,7 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
 
 @Composable
 private fun GeneratedElementView(element: UiElementSpec, onAction: () -> Unit) {
+    var fieldValue by remember(element.label) { mutableStateOf("") }
     val tint = element.color.toComposeColor()
     when (element.type) {
         UiElementType.HEADING -> Text(
@@ -159,8 +160,8 @@ private fun GeneratedElementView(element: UiElementSpec, onAction: () -> Unit) {
             }
         }
         UiElementType.FORM -> OutlinedTextField(
-            value = "",
-            onValueChange = {},
+            value = fieldValue,
+            onValueChange = { fieldValue = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text(element.label) },
             placeholder = { Text("اكتب هنا") },
