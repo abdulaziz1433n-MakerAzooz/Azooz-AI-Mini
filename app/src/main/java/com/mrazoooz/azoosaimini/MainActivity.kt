@@ -30,8 +30,10 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
     var prompt by remember { mutableStateOf("") }
     var messages by remember {
         mutableStateOf(listOf(ChatMessage(false,
-            "مرحبًا! أنا Azooz AI Mini. جرّب: أنشئ زر، أو غيّر لون الصفحة إلى أخضر.")))
+            "مرحبًا! اكتب أمرًا مثل: أنشئ زرًا أخضر، أو أضف بطاقة، أو أنشئ نموذجًا.")))
     }
+    var elements by remember { mutableStateOf(emptyList<UiElementSpec>()) }
+    var previewNotice by remember { mutableStateOf("") }
 
     MaterialTheme(colorScheme = lightColorScheme(
         primary = Color(0xFF16845B),
@@ -42,7 +44,7 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
                 Surface(tonalElevation = 3.dp) {
                     Column(Modifier.fillMaxWidth().padding(18.dp)) {
                         Text("Azooz AI Mini", fontSize = 24.sp)
-                        Text("نموذج عصبي تجريبي يعمل محليًا",
+                        Text("مساعد محلي تجريبي لإنشاء عناصر الواجهات",
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -61,6 +63,29 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
                         Text("خسارة التدريب: ${"%.3f".format(model.trainingLoss)}")
                     }
                 }
+
+                Text("معاينة الواجهة", style = MaterialTheme.typography.titleMedium)
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (elements.isEmpty()) {
+                            Text("ستظهر العناصر التي تنشئها هنا.")
+                        } else {
+                            elements.forEach { element ->
+                                GeneratedElementView(element) {
+                                    previewNotice = "تم الضغط على: ${element.label}"
+                                }
+                            }
+                        }
+                        if (previewNotice.isNotBlank()) {
+                            Text(previewNotice, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                Text("المحادثة", style = MaterialTheme.typography.titleMedium)
                 LazyColumn(
                     Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -80,6 +105,7 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
                         }
                     }
                 }
+
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
@@ -91,32 +117,64 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
                     onClick = {
                         val userText = prompt.trim()
                         if (userText.isNotEmpty()) {
+                            val result = UiCommandEngine.create(userText)
                             val (intent, confidence) = model.predict(userText)
+                            if (result.elements.isNotEmpty()) {
+                                elements = elements + result.elements
+                                previewNotice = ""
+                            }
                             messages = messages + ChatMessage(true, userText) +
-                                ChatMessage(false, buildReply(intent, confidence))
+                                ChatMessage(false, result.reply + "\n\nالتصنيف العصبي: $intent • الثقة: ${(confidence * 100).roundToInt()}%")
                             prompt = ""
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = prompt.isNotBlank()
-                ) { Text("إرسال") }
+                ) { Text("تنفيذ الأمر") }
             }
         }
     }
 }
 
-private fun buildReply(intent: String, confidence: Double): String {
-    val percent = (confidence * 100).roundToInt()
-    val reply = when (intent) {
-        "greeting" -> "أهلًا! أنا جاهز لتجربة أوامرك."
-        "heading" -> "تعرفت على طلب إضافة عنوان. سنحوّله لاحقًا إلى عنصر HTML."
-        "button" -> "تعرفت على طلب إضافة زر. سنضيف إنشاء الزر الفعلي في المرحلة التالية."
-        "card" -> "تعرفت على طلب إنشاء بطاقة محتوى."
-        "form" -> "تعرفت على طلب إنشاء نموذج إدخال."
-        "color" -> "تعرفت على طلب تغيير لون التصميم."
-        "interaction" -> "تعرفت على طلب إضافة تفاعل."
-        "help" -> "أتعرف على التحية والعناوين والأزرار والبطاقات والنماذج والألوان والتفاعلات."
-        else -> "لم أتعرف على الأمر بعد. جرّب: أضف زر أو أنشئ عنوانًا."
+@Composable
+private fun GeneratedElementView(element: UiElementSpec, onAction: () -> Unit) {
+    val tint = element.color.toComposeColor()
+    when (element.type) {
+        UiElementType.HEADING -> Text(
+            element.label,
+            style = MaterialTheme.typography.headlineSmall,
+            color = tint
+        )
+        UiElementType.BUTTON -> Button(
+            onClick = onAction,
+            colors = ButtonDefaults.buttonColors(containerColor = tint)
+        ) { Text(element.label) }
+        UiElementType.CARD -> Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.14f))
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Text(element.label, style = MaterialTheme.typography.titleMedium, color = tint)
+                Text("هذا عنصر بطاقة أُنشئ من الأمر.")
+            }
+        }
+        UiElementType.FORM -> OutlinedTextField(
+            value = "",
+            onValueChange = {},
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(element.label) },
+            placeholder = { Text("اكتب هنا") },
+            readOnly = false
+        )
     }
-    return "$reply\n\nالتصنيف: $intent • ثقة النموذج: $percent%"
+}
+
+private fun UiColor.toComposeColor(): Color = when (this) {
+    UiColor.GREEN -> Color(0xFF16845B)
+    UiColor.RED -> Color(0xFFD84343)
+    UiColor.BLUE -> Color(0xFF2878D0)
+    UiColor.PURPLE -> Color(0xFF8053B8)
+    UiColor.ORANGE -> Color(0xFFE58A26)
+    UiColor.BLACK -> Color(0xFF202124)
+    UiColor.DEFAULT -> Color(0xFF16845B)
 }
