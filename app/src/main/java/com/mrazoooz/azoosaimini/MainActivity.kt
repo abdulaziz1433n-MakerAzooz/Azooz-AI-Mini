@@ -27,6 +27,7 @@ private data class ChatMessage(val isUser: Boolean, val text: String)
 
 @Composable
 private fun AzoozMiniScreen(model: NeuralMiniModel) {
+    val ai = remember(model) { AzoozAI(model) }
     var prompt by remember { mutableStateOf("") }
     var messages by remember {
         mutableStateOf(listOf(ChatMessage(false,
@@ -117,14 +118,16 @@ private fun AzoozMiniScreen(model: NeuralMiniModel) {
                     onClick = {
                         val userText = prompt.trim()
                         if (userText.isNotEmpty()) {
-                            val result = UiCommandEngine.create(userText)
-                            val (intent, confidence) = model.predict(userText)
+                            val aiResult = ai.ask(userText)
+                            val result = aiResult.ui
+                            val intent = aiResult.intent
+                            val confidence = aiResult.confidence
                             if (result.elements.isNotEmpty()) {
                                 elements = elements + result.elements
                                 previewNotice = ""
                             }
                             messages = messages + ChatMessage(true, userText) +
-                                ChatMessage(false, result.reply + "\n\nالتصنيف العصبي: $intent • الثقة: ${(confidence * 100).roundToInt()}%")
+                                ChatMessage(false, aiResult.reply + "\n\nالتصنيف العصبي: $intent • الثقة: ${(confidence * 100).roundToInt()}%")
                             prompt = ""
                         }
                     },
